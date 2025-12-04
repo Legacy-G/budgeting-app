@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Debt Hub - Budgeting App{% endblock %}
+
+{% block head %}
+<style>
+    .action-button {
+        background-color: #0b2d4c;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background-color 0.3s ease;
+    }
+    .action-button:hover {
+        background-color: #1c4a78;
+    }
+    .action-buttons {
+        display: flex;
+        gap: 1.5rem;
+        justify-content: center;
+        margin-top: 2.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <h1>Debt Management Hub</h1>
+    <p style="font-size: 1.2rem; color: #606770;">Track an existing debt or start a new profile.</p>
+    <div class="action-buttons">
+        <a href="/debt/new" class="action-button">Create New Debt Profile</a>
+        <a href="/debt/profiles" class="action-button">View Existing Profiles</a>
+    </div>
+{% endblock %}

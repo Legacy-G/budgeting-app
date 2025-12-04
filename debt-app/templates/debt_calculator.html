@@ -1,0 +1,683 @@
+{% extends "base.html" %}
+
+{% block title %}Debt Mitigation Calculator{% endblock %}
+
+{% block head %}
+<style>
+    .form-group {
+        margin-bottom: 1.5rem;
+        text-align: left;
+    }
+    label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        color: #333;
+    }
+    input[type="number"] {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 1rem;
+        box-sizing: border-box;
+    }
+    .results-grid {
+        display: grid;
+        grid-template-columns: 1fr; /* Mobile-first: single column */
+        gap: 1rem;
+        margin-top: 2rem;
+        text-align: left;
+        width: 100%; /* Ensure it takes full width on mobile */
+    }
+    .result-card {
+        background-color: #f9fafb; /* Very light grey for card background */
+        border: 1px solid #f0f2f5; /* Thinner, more subtle border */
+        border-radius: 8px;
+        padding: 1.5rem;
+        height: 172px; /* Fixed height (140px + 1.5rem padding) */
+        box-sizing: border-box; /* Ensures padding is included in the height */
+        display: flex;
+        flex-direction: column;
+        position: relative; /* Needed for absolute positioning of the title */
+        justify-content: center; /* Center content vertically */
+        align-items: center; /* Center content horizontally */
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .result-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .result-card h3 {
+        position: absolute;
+        top: 1rem; /* Shifted title up */
+        left: 1.5rem;
+        margin: 0;
+        color: #0b2d4c;
+        font-size: 0.9rem; /* Reduced font size */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; /* Smoother font */
+        font-weight: 500;
+    }
+    .result-card p {
+        font-size: 2.2rem; /*size of value in the card*/
+        font-weight: bold;
+        color: #1c4a78;
+        text-align: center;
+        margin: 0;
+        /* Specific color overrides */
+        &.blue { color: #1c4a78; }
+        &.green { color: #28a745; }
+        &.red { color: #d9534f; }
+    }
+    .result-card .percentage {
+        font-size: 0.85rem;
+        font-weight: 500;
+        position: absolute;
+        bottom: 1.5rem;     /* Anchor to the bottom */
+        left: 1.5rem;
+        text-align: left;
+        width: auto;
+    }
+    .percentage.red { color: #d9534f; }
+    .percentage.green { color: #5cb85c; }
+
+    /* Custom styles for new projection card */
+    .projection-card {
+        /* grid-column will be handled by media queries */
+    }
+    .projection-card .projections-container {
+        display: flex;
+        /* flex-direction: column; */ /* Reverted */
+        justify-content: space-around;
+        width: 100%;
+    }
+    .projection-item h4 {
+        font-size: 0.8rem;
+        color: #606770;
+        margin: 0 0 0.25rem 0;
+        font-weight: normal;
+    }
+    /* Override for percentage spans inside the projection card */
+    .projection-item .percentage {
+        position: static; /* Revert absolute positioning */
+        text-align: center;
+        width: 100%;
+        margin-top: 0.25rem;
+    }
+    .projection-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    #chart_container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        /* flex-direction: column; */ /* Reverted to default (row) */
+        display: flex;
+        gap: 1rem;
+    }
+    #pie_chart_placeholder, #line_chart_container {
+        flex: 1; /* Each takes up half the space */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-style: italic;
+        color: #aaa;
+    }
+    /* Override padding for the chart card to allow edge-to-edge display */
+    .result-card.chart-card-specific {
+        padding: 0;
+        /* Revert flex centering for this specific card */
+        justify-content: flex-start;
+        align-items: stretch;
+    }
+    .chart-card-specific h3 {
+        /* This rule is no longer needed as the base h3 style is sufficient */
+        z-index: 10; /* Ensure title is above the chart */
+    }
+    /* New styles for the HTML/CSS pie chart */
+    .pie-chart-wrapper {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .pie-chart {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        position: relative;
+        /* The conic-gradient background will be set by a custom property */
+        background: var(--pie-gradient);
+        animation: grow-pie 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        animation-delay: 0.1s;
+        transform: scale(0); /* Start scaled down */
+    }
+    .pie-label {
+        position: absolute;
+        opacity: 0; /* Start hidden */
+        color: white;
+        font-size: 11px;
+        font-weight: bold;
+        /* Adjustments for better alignment */
+    }
+    /* New styles for the HTML/CSS bar chart */
+    .html-chart-container {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end; /* Align bars to the bottom */
+        width: 100%;
+        height: 100%;
+        padding: 1.5rem 1rem 1rem 1rem; /* Padding to keep bars from touching edges */
+        box-sizing: border-box;
+    }
+    .html-bar {
+        width: 30%;
+        border-radius: 8px; /* The true border-radius you wanted */
+        position: relative;
+        height: var(--bar-height);
+        transform: scaleY(0); /* Start scaled to 0 vertically */
+        transform-origin: bottom;
+        animation: grow-bar 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        animation-name: grow-bar; /* Explicitly name the animation */
+    }
+    .bar-label {
+        position: absolute;
+        opacity: 0; /* Start hidden */
+        top: -20px; /* Position the label closer to the bar */
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 10px;
+        font-weight: bold;
+        animation: fade-in 0.5s ease forwards; /* Apply fade-in by default */
+    }
+    .home-link {
+        display: inline-block;
+        margin-top: 2rem;
+        color: #0b2d4c;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .naira-sign {
+        font-size: 0.4em;
+        vertical-align: super;
+        color: #909090;
+        margin-right: 2px;
+    }
+    .sub-text {
+        font-size: 0.4em;
+        font-weight: 500;
+        vertical-align: sub;
+        color: #909090;
+        margin-left: 4px;
+    }
+    #results_view {
+        display: none; /* Hide results by default */
+    }
+    #calculate_btn {
+        background-color: #0b2d4c;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.8rem 1.5rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background-color 0.3s ease, opacity 0.3s ease;
+        margin-top: 1rem;
+        width: 100%;
+    }
+    #calculate_btn:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+    #recalculate_btn {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.8rem 1.5rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background-color 0.3s ease;
+    }
+    #save_btn {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.8rem 1.5rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background-color 0.3s ease;
+    }
+    .results-actions {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 2rem;
+        max-width: calc(440px + 1rem); /* (2 * 220px) + gap */
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .results-actions button {
+        flex: 1;
+        max-width: 240px;
+    }
+    /* --- ANIMATIONS --- */
+    @keyframes grow-pie { to { transform: scale(1); } }
+    @keyframes grow-bar { to { transform: scaleY(1); } }
+    @keyframes fade-in { to { opacity: 1; } }
+    /* Animation for the bar label hover effect */
+    @keyframes re-fade-bar-label {
+        0%, 100% { opacity: 1; } /* End in a visible state */
+        50% { opacity: 0; }      /* Disappear midway through */
+    }
+
+    
+
+    /* --- RESPONSIVENESS --- */
+    /* Tablet view: 2 columns */
+    @media (min-width: 540px) {
+        .results-grid {
+            grid-template-columns: repeat(2, 220px);
+            justify-content: center; /* Center the grid */
+        }
+        .projection-card {
+            grid-column: span 2; /* Span two columns */
+        }
+    }
+
+    /* Desktop view: 4 columns */
+    @media (min-width: 980px) {
+        .results-grid {
+            grid-template-columns: repeat(4, 220px);
+        }
+    }
+
+    /* --- HOVER ANIMATION RE-TRIGGER --- */
+    .chart-card-specific:hover .pie-chart {
+        animation: grow-pie 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+    .chart-card-specific:hover .html-bar {
+        /* Stagger the bar animations on hover for a nice effect */
+        animation-name: grow-bar; /* Re-trigger the same animation */
+    }
+    .chart-card-specific:hover .pie-label { animation: fade-in 0.5s ease forwards 0.5s; }
+    .chart-card-specific:hover .bar-label {
+        animation: re-fade-bar-label 0.6s ease-out forwards; /* Use the new blink animation */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <!-- Step 1: Input View -->
+    <div id="input_view">
+        <h2>Debt Mitigation Strategy</h2>
+        <p style="color: #606770; margin-bottom: 2rem;">Enter your current debt and a potential payment to see your payoff projections.</p>
+
+        <div class="form-group">
+            <label for="debt_name">Debt Profile Name</label>
+            <input type="text" id="debt_name" placeholder="Debt Name">
+        </div>
+        <div style="display: flex; gap: 1rem;">
+            <div class="form-group" style="flex: 2;">
+                <label for="daily_accrual">Daily Accrual Amount (Naira)</label>
+                <input type="number" id="daily_accrual" placeholder="e.g., 686">
+            </div>
+            <div class="form-group" style="flex: 1;">
+                <label for="accrual_rate">Accrual Rate (Days)</label>
+                <input type="number" id="accrual_rate" value="1" disabled>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="current_debt">Current Total Debt (Naira)</label>
+            <input type="number" id="current_debt" placeholder="e.g., 178286">
+        </div>
+
+        <div class="form-group">
+            <label for="payment_amount">Your Payment Amount (Naira)</label>
+            <input type="number" id="payment_amount" placeholder="e.g., 50000">
+        </div>
+
+        <button id="calculate_btn" disabled>Calculate Projections</button>
+    </div>
+
+    <!-- Step 2: Results View -->
+    <div id="results_view">
+        <h2>Your Financial Projections</h2>
+        <p style="color: #606770; margin-bottom: 2rem;">Based on your inputs, here is your projected debt payoff analysis.</p>
+
+        <!-- New top row of cards -->
+        <div class="results-grid">
+            <div class="result-card">
+                <h3>Initial Debt Overdue</h3>
+                <p id="res_initial_debt" class="red">N/A</p>
+                <span class="percentage red" id="res_initial_debt_pct"></span>
+            </div>
+            <div class="result-card">
+                <h3>Repayment</h3>
+                <p id="res_payment_made" class="green">N/A</p>
+                <span class="percentage green" id="res_payment_made_pct"></span>
+            </div>
+            <div class="result-card">
+                <h3>Current Debt Overdue</h3>
+                <p id="res_current_debt" class="red">N/A</p>
+                <span class="percentage red" id="res_current_debt_pct"></span>
+            </div>
+            <div class="result-card">
+                <h3>Projected Payoff Timeline</h3>
+                <p id="res_months_to_clear" class="green">N/A</p>
+                <span class="percentage green" id="res_months_to_clear_pct"></span>
+            </div>
+            <div class="result-card projection-card">
+                <h3>Debt Projection</h3>
+                <div id="projections_container" class="projections-container"></div>
+            </div>
+            <div class="result-card projection-card chart-card-specific">
+                <h3>Stats</h3>
+                <div id="chart_container">
+                    <div id="pie_chart_placeholder"></div>
+                    <div id="line_chart_container"></div>
+                </div>
+            </div>
+        </div>
+        <div class="results-actions">
+            <button id="save_btn">Save Debt Profile</button>
+            <button id="recalculate_btn">New Projections</button>
+        </div>
+    </div>
+
+    <a href="/" class="home-link">← Back to Home</a>
+
+    <py-script>
+        # This is where your Python logic will live in the browser.
+        from pyscript import document, display
+        from pyodide.ffi import create_proxy
+        import math
+        import json, sys
+
+        # --- ALGORITHM LOGIC ---
+        # By placing the functions here, we avoid all import errors.
+        def calculate_months_to_clear(current_debt: float, monthly_payment: float, daily_accrual: float) -> int | None:
+            """
+            Calculates how many months it takes to clear the debt.
+            """
+            # Use a more precise average days in a month for the check
+            if monthly_payment <= daily_accrual * (365.25 / 12):
+                return None
+            
+            months = 0
+            debt = current_debt
+            while debt > 0:
+                months += 1
+                interest_for_month = daily_accrual * 30
+                debt = debt + interest_for_month - monthly_payment
+                if months > 600:  # Safety break
+                    return None
+            return months
+
+        def project_debt_over_months(current_debt: float, monthly_payment: float, daily_accrual: float, num_months: int) -> list[float]:
+            """
+            Projects the debt balance over a given number of months.
+            """
+            projections = []
+            debt = current_debt
+            for _ in range(num_months):
+                interest_for_month = daily_accrual * 30
+                debt = debt + interest_for_month - monthly_payment
+                debt = max(0, debt)
+                projections.append(debt)
+            return projections
+
+        # --- CHARTING LOGIC ---
+        # A global variable to hold the chart instance so we can destroy it on recalculation
+        chart_instance = None
+
+        # --- RENDER CHART FUNCTION ---
+        def render_chart(initial, repayment, current):
+            """Renders a comparison bar chart using pure HTML and CSS."""
+            # Helper function to format numbers with 'k' for thousands
+            def format_k(num):
+                if num >= 1000:
+                    return f"₦{int(num/1000)}k"
+                return f"₦{int(num)}"
+
+            # --- 1. PIE CHART LOGIC ---
+            repayment_pct = (repayment / initial) * 100 if initial > 0 else 0
+            remaining_pct = 100 - repayment_pct
+
+            # Define the gap size in degrees
+            gap_deg = 4
+            
+            # Calculate start/end points for the conic gradient
+            green_start_deg = gap_deg / 2
+            green_end_deg = (repayment_pct * 3.6) - (gap_deg / 2)
+            red_start_deg = green_end_deg + gap_deg
+            red_end_deg = 360 - (gap_deg / 2)
+
+
+            # Calculate positions for the percentage labels, now rotating to align with the circle
+            repayment_angle_rad = math.radians(((green_start_deg + green_end_deg) / 2) - 90)            
+
+            debt_angle_rad = math.radians(((red_start_deg + red_end_deg) / 2) - 90)
+
+            # Labels are positioned from the center (50,50) with a radius of 35
+            repayment_x = 50 + 35 * math.cos(repayment_angle_rad)
+            repayment_y = 50 + 35 * math.sin(repayment_angle_rad)
+            debt_x = 50 + 35 * math.cos(debt_angle_rad)
+            debt_y = 50 + 35 * math.sin(debt_angle_rad)
+
+            pie_gradient = f"conic-gradient(transparent 0deg {green_start_deg}deg, #28a745 {green_start_deg}deg {green_end_deg}deg, transparent {green_end_deg}deg {red_start_deg}deg, #d9534f {red_start_deg}deg {red_end_deg}deg, transparent {red_end_deg}deg 360deg)"
+            
+            # Build the HTML for the pie chart
+            pie_html = f"""
+                <div class="pie-chart-wrapper">
+                    <div class="pie-chart" style="--pie-gradient: {pie_gradient};">
+                        <div class="pie-label" style="top: {repayment_y}%; left: {repayment_x}%; animation-delay: 0.6s;">{repayment_pct:.0f}%</div>
+                        <div class="pie-label" style="top: {debt_y}%; left: {debt_x}%; animation-delay: 0.6s;">{remaining_pct:.0f}%</div>
+                    </div>
+                </div>
+            """
+
+            pie_container = document.querySelector("#pie_chart_placeholder")
+            pie_container.innerHTML = pie_html
+
+            # --- 2. BAR CHART LOGIC ---
+            # Data for the bar chart
+            data = [
+                {'value': initial, 'color': '#d9534f'},
+                {'value': repayment, 'color': '#28a745'},
+                {'value': current, 'color': '#f0ad4e'}
+            ]
+            
+            max_value = max(d['value'] for d in data)
+            if max_value == 0: max_value = 1 # Avoid division by zero
+
+            # Build the HTML for the bars
+            html_bars = ""
+            for i, item in enumerate(data):
+                value = item['value']
+                color = item['color']
+                # Calculate height as a percentage of the max value
+                height_percent = (value / max_value) * 100
+                
+                html_bars += f"""
+                    <div class="html-bar" style="--bar-height: {height_percent}%; background-color: {color}; animation-delay: {0.15 * i}s;">
+                        <div class="bar-label" style="color: {color}; animation-delay: {0.4 + 0.15 * i}s;">{format_k(value)}</div>
+                    </div>
+                """
+            
+            # Find the container and set its content
+            bar_chart_container = document.querySelector("#line_chart_container")
+            bar_chart_container.innerHTML = f'<div class="html-chart-container">{html_bars}</div>'
+
+        # --- UI AND EVENT HANDLING LOGIC ---
+
+        # Get references to all the HTML elements we need to interact with
+        debt_input = document.querySelector("#current_debt")
+        payment_input = document.querySelector("#payment_amount")
+        calculate_btn = document.querySelector("#calculate_btn")
+        input_view = document.querySelector("#input_view")
+        results_view = document.querySelector("#results_view")
+        recalculate_btn = document.querySelector("#recalculate_btn")
+        # New input fields
+        debt_name_input = document.querySelector("#debt_name")
+        daily_accrual_input = document.querySelector("#daily_accrual")
+
+        def toggle_button_state(*args, **kwargs):
+            """Enable or disable the button based on input values."""
+            name_val = debt_name_input.value
+            debt_val_str = debt_input.value or "0"
+            payment_val_str = payment_input.value or "0"
+            accrual_val_str = daily_accrual_input.value or "0"
+            try:
+                debt_val = float(debt_val_str)
+                payment_val = float(payment_val_str)
+                accrual_val = float(accrual_val_str)
+                if debt_val > 0 and payment_val > 0 and name_val and accrual_val > 0:
+                    calculate_btn.disabled = False
+                else:
+                    calculate_btn.disabled = True
+            except (ValueError, TypeError):
+                calculate_btn.disabled = True
+        
+        def calculate_projections(*args, **kwargs):
+            """This function will run when the button is clicked."""
+            # --- 1. GET INPUTS ---
+            initial_debt = float(debt_input.value)
+            payment = float(payment_input.value)
+            daily_accrual = float(daily_accrual_input.value)
+
+            # --- 2. PERFORM REAL CALCULATIONS ---
+            current_debt = initial_debt - payment
+            
+            months_val = calculate_months_to_clear(current_debt, payment, daily_accrual)
+            if months_val is None:
+                months_html = "Never"
+                months_subtext = "Payment too low"
+                # If it will never be paid off, just project for a few years for the chart
+                chart_months = 36
+            else:
+                months_html = f'{months_val}<span class="sub-text">months</span>'                
+                chart_months = months_val
+
+                # Calculate years for the subtext
+                years = months_val / 12
+                # Round to one decimal place, but show as integer if it's a whole number
+                years_rounded = round(years, 1)
+                if years_rounded == int(years_rounded):
+                    years_display = int(years_rounded)
+                else:
+                    years_display = years_rounded
+                
+                year_str = "years" if years_display >= 2 else "Year"
+                months_subtext = f"Approx ~ {years_display} {year_str}"
+
+            projections = project_debt_over_months(current_debt, payment, daily_accrual, 2) # For the cards
+            proj_1_month = projections[0]
+            proj_2_months = projections[1]
+
+            # --- 3. CALCULATE PERCENTAGES ---
+            payment_pct = (payment / initial_debt) * 100 if initial_debt > 0 else 0
+            current_debt_pct = (current_debt / initial_debt) * 100 if initial_debt > 0 else 0
+            proj_1_month_pct = (proj_1_month / initial_debt) * 100 if initial_debt > 0 else 0
+            proj_2_months_pct = (proj_2_months / initial_debt) * 100 if initial_debt > 0 else 0
+
+            # --- 3. UPDATE RESULT CARDS ---
+            document.querySelector("#res_initial_debt").innerHTML = f'<span class="naira-sign">₦</span>-{initial_debt:,.0f}'
+            document.querySelector("#res_payment_made").innerHTML = f'<span class="naira-sign">₦</span>+{payment:,.0f}'
+            document.querySelector("#res_current_debt").innerHTML = f'<span class="naira-sign">₦</span>-{current_debt:,.0f}'
+            document.querySelector("#res_months_to_clear").innerHTML = months_html
+
+            # Update percentages
+            document.querySelector("#res_initial_debt_pct").innerText = "100.0% of debt"
+            document.querySelector("#res_payment_made_pct").innerText = f"{payment_pct:.1f}% of initial"
+            document.querySelector("#res_current_debt_pct").innerText = f"{current_debt_pct:.1f}% of initial"
+            document.querySelector("#res_months_to_clear_pct").innerText = months_subtext
+
+            # Update the combine projection card
+            proj_container = document.querySelector("#projections_container")
+            proj_container.innerHTML = f"""
+                <div class="projection-item">
+                    <h4>In One Month</h4>
+                    <p class="red"><span class="naira-sign">₦</span>-{proj_1_month:,.0f}</p>
+                    <span class="percentage red">{proj_1_month_pct:.1f}% of initial</span>
+                </div>
+                <div class="projection-item">
+                    <h4>In Two Months</h4>
+                    <p class="red"><span class="naira-sign">₦</span>-{proj_2_months:,.0f}</p>
+                    <span class="percentage red">{proj_2_months_pct:.1f}% of initial</span>
+                </div>
+            """
+
+            # --- 5. RENDER THE CHART ---
+            render_chart(initial_debt, payment, current_debt)
+
+            # Reset save button in case user recalculates
+            save_button = document.querySelector("#save_btn")
+            save_button.innerText = "Save Debt Profile"
+            document.querySelector("#save_btn").disabled = False
+
+            input_view.style.display = "none"
+            results_view.style.display = "block"
+
+        def show_input_view(*args, **kwargs):
+            """Hides the results and shows the input form again."""
+            results_view.style.display = "none"
+            input_view.style.display = "block"
+        
+        async def save_profile(*args, **kwargs):
+            """Saves the new debt profile to the backend via API call."""
+            save_button = document.querySelector("#save_btn")
+            save_button.innerText = "Creating Profile..."
+            save_button.disabled = True
+
+            profile_data = {
+                "name": debt_name_input.value,
+                "initial_debt": float(debt_input.value),
+                "daily_accrual": float(daily_accrual_input.value),
+                "first_payment": float(payment_input.value)
+            }
+
+            try:
+                response = await pyscript.fetch(
+                    "/debt/api/profiles",
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                    body=json.dumps(profile_data)
+                )
+                if response.ok:
+                    save_button.innerText = "Profile Created!"
+            except Exception as e:
+                save_button.innerText = "Save Failed"
+                print(f"Error saving profile: {e}")
+
+        # Create persistent proxies for the Python functions
+        toggle_proxy = create_proxy(toggle_button_state)
+        calculate_proxy = create_proxy(calculate_projections)
+        recalculate_proxy = create_proxy(show_input_view)
+        save_proxy = create_proxy(save_profile)
+
+        # Add event listeners using the proxies
+        for el in [debt_name_input, daily_accrual_input, debt_input, payment_input]:
+            el.addEventListener("input", toggle_proxy)
+        calculate_btn.addEventListener("click", calculate_proxy)
+        recalculate_btn.addEventListener("click", recalculate_proxy)
+
+        document.querySelector("#save_btn").addEventListener("click", save_proxy)
+
+    </py-script>
+{% endblock %}
